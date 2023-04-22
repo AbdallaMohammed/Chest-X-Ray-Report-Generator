@@ -64,10 +64,9 @@ class Vocabulary:
 
 
 class XRayDataset(Dataset):
-    def __init__(self, root, transform=None, text_preprocessing=None, freq_threshold=3, raw_caption=False):
+    def __init__(self, root, transform=None, freq_threshold=3, raw_caption=False):
         self.root = root
         self.transform = transform
-        self.text_preprocessing = text_preprocessing
         self.raw_caption = raw_caption
 
         self.vocab = Vocabulary(freq_threshold=freq_threshold)
@@ -105,7 +104,7 @@ class XRayDataset(Dataset):
 
     def __getitem__(self, item):
         img = self.imgs[item]
-        caption = self.captions[item]
+        caption = utils.normalize_text(self.captions[item])
 
         img = np.array(Image.open(img).convert('L'))
         img = np.expand_dims(img, axis=-1)
@@ -113,9 +112,6 @@ class XRayDataset(Dataset):
 
         if self.transform is not None:
             img = self.transform(image=img)['image']
-
-        if self.text_preprocessing is not None:
-            caption = self.text_preprocessing(text=caption)
 
         if self.raw_caption:
             return img, caption
@@ -143,7 +139,7 @@ class CollateDataset:
         images = torch.stack(images, 0)
         
         targets = [item for item in captions]
-        targets = pad_sequence(targets, batch_first=False, padding_value=self.pad_idx)
+        targets = pad_sequence(targets, batch_first=True, padding_value=self.pad_idx)
 
         return images, targets
 
@@ -153,7 +149,6 @@ if __name__ == '__main__':
         root=config.DATASET_PATH,
         transform=config.basic_transforms,
         freq_threshold=config.VOCAB_THRESHOLD,
-        text_preprocessing=utils.text_preprocessing
     )
 
     train_loader = DataLoader(

@@ -1,18 +1,14 @@
 import os
+import re
+import html
+import string
 import torch
 import config
-import utils
-import numpy as np
+import unicodedata
+from nltk.tokenize import word_tokenize
 
-from tqdm import tqdm
-from nltk.translate.bleu_score import SmoothingFunction
-from nltk.translate.bleu_score import sentence_bleu
 from torch.utils.data import Subset
 from sklearn.model_selection import train_test_split as sklearn_train_test_split
-
-
-def text_preprocessing(text):
-    return text.lower()
 
 
 def train_test_split(dataset, test_size=0.25, random_state=44):
@@ -47,59 +43,46 @@ def can_load_checkpoint():
     return os.path.exists(config.CHECKPOINT_FILE) and config.LOAD_MODEL
 
 
-def check_accuracy(dataset, vocab, model, epoch):
-    print('=> Testing')
+def remove_special_chars(text):
+    re1 = re.compile(r'  +')
+    x1 = text.lower().replace('#39;', "'").replace('amp;', '&').replace('#146;', "'").replace(
+        'nbsp;', ' ').replace('#36;', '$').replace('\\n', "\n").replace('quot;', "'").replace(
+        '<br />', "\n").replace('\\"', '"').replace('<unk>', 'u_n').replace(' @.@ ', '.').replace(
+        ' @-@ ', '-').replace('\\', ' \\ ')
 
-    model.eval()
+    return re1.sub(' ', html.unescape(x1))
 
-    bleu1_score = []
-    bleu2_score = []
-    bleu3_score = []
-    bleu4_score = []
 
-    for item_id, (image, caption) in enumerate(tqdm(dataset)):
-        image = image.to(config.DEVICE)
+def remove_non_ascii(text):
+    return unicodedata.normalize('NFKD', text).encode('ascii', 'ignore').decode('utf-8', 'ignore')
 
-        caption = utils.text_preprocessing(' '.join([vocab.itos[idx] for idx in caption.numpy()]))
-        generated = utils.text_preprocessing(' '.join(model.generate_caption(image.unsqueeze(0), vocab, max_length=150)))
 
-        bleu1_score.append(
-            sentence_bleu(
-                [caption.split()],
-                generated.split(),
-                smoothing_function=SmoothingFunction().method4,
-                weights=(1.0, 0, 0, 0)
-            )
-        )
+def to_lowercase(text):
+    return text.lower()
 
-        bleu2_score.append(
-            sentence_bleu(
-                [caption.split()],
-                generated.split(),
-                smoothing_function=SmoothingFunction().method4,
-                weights=(0.5, 0.5, 0, 0)
-            )
-        )
 
-        bleu3_score.append(
-            sentence_bleu(
-                [caption.split()],
-                generated.split(),
-                smoothing_function=SmoothingFunction().method4,
-                weights=(0.33, 0.33, 0.33, 0)
-            )
-        )
+def remove_punctuation(text):
+    translator = str.maketrans('', '', string.punctuation)
+    return text.translate(translator)
 
-        bleu4_score.append(
-            sentence_bleu(
-                [caption.split()],
-                generated.split(),
-                smoothing_function=SmoothingFunction().method4,
-                weights=(0.25, 0.25, 0.25, 0.25)
-            )
-        )
 
-    print(f'Epoch[{epoch}] => BLEU 1: {np.mean(bleu1_score)}')
-    print(f'Epoch[{epoch}] => BLEU 2: {np.mean(bleu2_score)}')
-    print(f'Epoch[{epoch}] => BLEU 3: {np.mean(bleu3_score)}')
-    print(f'Epoch[{epoch}] => BLEU 4: {np.mean(bleu4_score)}')
+def replace_numbers(text):
+    return re.sub(r'\d+', '', text)
+
+
+def text2words(text):
+    return word_tokenize(text)
+
+
+def normalize_text( text):
+    text = remove_special_chars(text)
+    text = remove_non_ascii(text)
+    text = remove_punctuation(text)
+    text = to_lowercase(text)
+    text = replace_numbers(text)
+
+    return text
+
+
+def normalize_corpus(corpus):
+    return [normalize_text(t) for t in corpus]

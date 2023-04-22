@@ -1,9 +1,8 @@
-import torch
+import config
+import utils
 import torch.nn as nn
 import torch.optim as optim
 import numpy as np
-import config
-import utils
 
 from tqdm import tqdm
 from torch.utils.data import DataLoader
@@ -22,11 +21,11 @@ def train_epoch(loader, model, optimizer, loss_fn, epoch):
         img = img.to(config.DEVICE)
         captions = captions.to(config.DEVICE)
 
-        output = model(img, captions[:-1])
+        output = model(img, captions)
 
         loss = loss_fn(
             output.reshape(-1, output.shape[2]),
-            captions.reshape(-1)
+            captions[:, 1:].reshape(-1)
         )
 
         optimizer.zero_grad()
@@ -41,7 +40,8 @@ def train_epoch(loader, model, optimizer, loss_fn, epoch):
         utils.save_checkpoint({
             'state_dict': model.state_dict(),
             'optimizer': optimizer.state_dict(),
-            'epoch': epoch
+            'epoch': epoch,
+            'loss': np.mean(losses)
         })
 
     print(f'Epoch[{epoch}]: Loss {np.mean(losses)}')
@@ -52,24 +52,25 @@ def main():
         root=config.DATASET_PATH,
         transform=config.basic_transforms,
         freq_threshold=config.VOCAB_THRESHOLD,
-        text_preprocessing=utils.text_preprocessing
     )
 
-    train_dataset, test_dataset = utils.train_test_split(dataset=all_dataset)
+    train_dataset, _ = utils.train_test_split(dataset=all_dataset)
 
     train_loader = DataLoader(
         dataset=train_dataset,
         batch_size=config.BATCH_SIZE,
         pin_memory=config.PIN_MEMORY,
-        drop_last=True,
+        drop_last=False,
         shuffle=True,
         collate_fn=CollateDataset(pad_idx=all_dataset.vocab.stoi['<PAD>']),
     )
 
     model = EncoderDecoderNet(
-        embed_size=512,
-        hidden_size=512,
-        vocab_size=len(all_dataset.vocab)
+        features_size=config.FEATURES_SIZE,
+        embed_size=config.EMBED_SIZE,
+        hidden_size=config.HIDDEN_SIZE,
+        vocab_size=len(all_dataset.vocab),
+        encoder_checkpoint='./weights/chexnet.pth.tar'
     )
     model = model.to(config.DEVICE)
 
@@ -87,13 +88,6 @@ def main():
             model,
             optimizer,
             loss_fn,
-            epoch
-        )
-
-        utils.check_accuracy(
-            test_dataset,
-            all_dataset.vocab,
-            model,
             epoch
         )
 
