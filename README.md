@@ -1,5 +1,7 @@
 # Chest X-Ray Report Generator
 
+> This project is part of a task for the college where I study, so `task-parts` contains files that associated with that task, whishing that I would get the full mark ;). In general the base code doesn't have any special parts except that folder.
+
 ## Installation
 
 After cloning the repository, install the required packages in a virtual environment.

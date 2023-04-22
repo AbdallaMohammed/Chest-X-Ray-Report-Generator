@@ -21,12 +21,12 @@ def load_dataset():
     )
 
 
-def get_model_instance(vocab_size):
+def get_model_instance(vocabulary):
     model = EncoderDecoderNet(
         features_size=config.FEATURES_SIZE,
         embed_size=config.EMBED_SIZE,
         hidden_size=config.HIDDEN_SIZE,
-        vocab_size=vocab_size,
+        vocabulary=vocabulary,
         encoder_checkpoint='./weights/chexnet.pth.tar'
     )
     model = model.to(config.DEVICE)
