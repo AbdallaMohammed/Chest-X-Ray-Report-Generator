@@ -7,9 +7,31 @@ import config
 import unicodedata
 from nltk.tokenize import word_tokenize
 
+from dataset import XRayDataset
+from model import EncoderDecoderNet
 from torch.utils.data import Subset
 from sklearn.model_selection import train_test_split as sklearn_train_test_split
 
+
+def load_dataset():
+    return XRayDataset(
+        root=config.DATASET_PATH,
+        transform=config.basic_transforms,
+        freq_threshold=config.VOCAB_THRESHOLD,
+    )
+
+
+def get_model_instance(vocab_size):
+    model = EncoderDecoderNet(
+        features_size=config.FEATURES_SIZE,
+        embed_size=config.EMBED_SIZE,
+        hidden_size=config.HIDDEN_SIZE,
+        vocab_size=vocab_size,
+        encoder_checkpoint='./weights/chexnet.pth.tar'
+    )
+    model = model.to(config.DEVICE)
+
+    return model
 
 def train_test_split(dataset, test_size=0.25, random_state=44):
     train_idx, test_idx = sklearn_train_test_split(

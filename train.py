@@ -6,8 +6,7 @@ import numpy as np
 
 from tqdm import tqdm
 from torch.utils.data import DataLoader
-from model import EncoderDecoderNet
-from dataset import XRayDataset, CollateDataset
+from dataset import CollateDataset
 
 
 def train_epoch(loader, model, optimizer, loss_fn, epoch):
@@ -48,11 +47,7 @@ def train_epoch(loader, model, optimizer, loss_fn, epoch):
 
 
 def main():
-    all_dataset = XRayDataset(
-        root=config.DATASET_PATH,
-        transform=config.basic_transforms,
-        freq_threshold=config.VOCAB_THRESHOLD,
-    )
+    all_dataset = utils.load_dataset()
 
     train_dataset, _ = utils.train_test_split(dataset=all_dataset)
 
@@ -65,14 +60,7 @@ def main():
         collate_fn=CollateDataset(pad_idx=all_dataset.vocab.stoi['<PAD>']),
     )
 
-    model = EncoderDecoderNet(
-        features_size=config.FEATURES_SIZE,
-        embed_size=config.EMBED_SIZE,
-        hidden_size=config.HIDDEN_SIZE,
-        vocab_size=len(all_dataset.vocab),
-        encoder_checkpoint='./weights/chexnet.pth.tar'
-    )
-    model = model.to(config.DEVICE)
+    model = utils.get_model_instance(all_dataset.vocab)
 
     optimizer = optim.Adam(model.parameters(), lr=config.LEARNING_RATE)
     loss_fn = nn.CrossEntropyLoss(ignore_index=all_dataset.vocab.stoi['<PAD>'])

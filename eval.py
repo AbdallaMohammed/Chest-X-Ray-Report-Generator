@@ -3,12 +3,10 @@ import utils
 import numpy as np
 
 from tqdm import tqdm
-from dataset import XRayDataset
-from model import EncoderDecoderNet
 from nltk.translate.bleu_score import sentence_bleu
 
 
-def check_accuracy(dataset, vocab, model):
+def check_accuracy(dataset, model):
     print('=> Testing')
 
     model.eval()
@@ -18,10 +16,10 @@ def check_accuracy(dataset, vocab, model):
     bleu3_score = []
     bleu4_score = []
 
-    for _, (image, caption) in enumerate(tqdm(dataset)):
+    for image, caption in tqdm(dataset):
         image = image.to(config.DEVICE)
 
-        generated = model.generate_caption(image.unsqueeze(0), vocab, max_length=len(caption) + 1)
+        generated = model.generate_caption(image.unsqueeze(0), max_length=len(caption.split(' ')))
 
         bleu1_score.append(
             sentence_bleu([caption.split()], generated, weights=(1, 0, 0, 0))
@@ -46,28 +44,16 @@ def check_accuracy(dataset, vocab, model):
 
 
 def main():
-    all_dataset = XRayDataset(
-        root=config.DATASET_PATH,
-        transform=config.basic_transforms,
-        freq_threshold=config.VOCAB_THRESHOLD,
-        raw_caption=True
-    )
+    all_dataset = utils.load_dataset()
 
-    model = EncoderDecoderNet(
-        features_size=config.FEATURES_SIZE,
-        embed_size=config.EMBED_SIZE,
-        hidden_size=config.HIDDEN_SIZE,
-        vocab_size=len(all_dataset.vocab)
-    )
-    model = model.to(config.DEVICE)
-
-    _, test_dataset = utils.train_test_split(dataset=all_dataset)
+    model = utils.get_model_instance(all_dataset.vocab)
 
     utils.load_checkpoint(model)
 
+    _, test_dataset = utils.train_test_split(dataset=all_dataset)
+
     check_accuracy(
         test_dataset,
-        all_dataset.vocab,
         model
     )
 

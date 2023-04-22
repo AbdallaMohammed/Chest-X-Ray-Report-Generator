@@ -11,11 +11,11 @@ from collections import OrderedDict
 class DenseNet121(nn.Module):
     def __init__(self, out_size=14, checkpoint=None):
         super(DenseNet121, self).__init__()
-        
+
         self.densenet121 = models.densenet121(weights='DEFAULT')
-        
+
         num_classes = self.densenet121.classifier.in_features
-        
+
         self.densenet121.classifier = nn.Sequential(
             nn.Linear(num_classes, out_size),
             nn.Sigmoid()
@@ -38,12 +38,12 @@ class DenseNet121(nn.Module):
                     k = k.replace('.conv.1', '.conv1')
                     k = k.replace('.norm.2', '.norm2')
                     k = k.replace('.conv.2', '.conv2')
-                    
+
                     new_state_dict[k] = v
 
             self.densenet121.load_state_dict(new_state_dict)
 
-    def forward(self, x):        
+    def forward(self, x):
         return self.densenet121(x)
 
 
@@ -60,9 +60,9 @@ class EncoderCNN(nn.Module):
 
     def forward(self, images):
         features = self.model.densenet121.features(images)
-    
+
         batch, maps, size_1, size_2 = features.size()
-        
+
         features = features.permute(0, 2, 3, 1)
         features = features.view(batch, size_1 * size_2, maps)
 
@@ -82,11 +82,11 @@ class Attention(nn.Module):
 
         w = self.W(features)
         u = self.U(decoder_output)
-        
+
         scores = self.v(torch.tanh(w + u))
         weights = F.softmax(scores, dim=1)
         context = torch.sum(weights * features, dim=1)
-        
+
         weights = weights.squeeze(2)
 
         return context, weights
@@ -100,7 +100,7 @@ class DecoderRNN(nn.Module):
 
         self.embedding = nn.Embedding(vocab_size, embed_size)
         self.lstm = nn.LSTMCell(embed_size + features_size, hidden_size)
-        
+
         self.fc = nn.Linear(hidden_size, vocab_size)
 
         self.attention = Attention(features_size, hidden_size)
@@ -132,7 +132,7 @@ class DecoderRNN(nn.Module):
 
             outputs[:, i, :] = output
             atten_weights[:, i, :] = attention
-        
+
         return outputs, atten_weights
 
     def init_hidden(self, features):
@@ -145,8 +145,10 @@ class DecoderRNN(nn.Module):
 
 
 class EncoderDecoderNet(nn.Module):
-    def __init__(self, features_size, embed_size, hidden_size, vocab_size, encoder_checkpoint=None):
+    def __init__(self, features_size, embed_size, hidden_size, vocabulary, encoder_checkpoint=None):
         super(EncoderDecoderNet, self).__init__()
+
+        self.vocabulary = vocabulary
 
         self.encoder = EncoderCNN(
             checkpoint=encoder_checkpoint
@@ -155,7 +157,7 @@ class EncoderDecoderNet(nn.Module):
             features_size=features_size,
             embed_size=embed_size,
             hidden_size=hidden_size,
-            vocab_size=vocab_size
+            vocab_size=len(self.vocabulary)
         )
 
     def forward(self, images, captions):
@@ -163,15 +165,15 @@ class EncoderDecoderNet(nn.Module):
         outputs, _ = self.decoder(features, captions)
 
         return outputs
-    
-    def generate_caption(self, image, vocabulary, max_length=25):
+
+    def generate_caption(self, image, max_length=25):
         caption = []
 
         with torch.no_grad():
             features = self.encoder(image)
             h, c = self.decoder.init_hidden(features)
 
-            word = torch.tensor(vocabulary.stoi['<SOS>']).view(1, -1).to(config.DEVICE)
+            word = torch.tensor(self.vocabulary.stoi['<SOS>']).view(1, -1).to(config.DEVICE)
             embeddings = self.decoder.embedding(word).squeeze(0)
 
             for _ in range(max_length):
@@ -186,11 +188,11 @@ class EncoderDecoderNet(nn.Module):
 
                 predicted = output.argmax(1)
 
-                if vocabulary.itos[predicted.item()] == '<EOS>':
+                if self.vocabulary.itos[predicted.item()] == '<EOS>':
                     break
 
                 caption.append(predicted.item())
 
                 embeddings = self.decoder.embedding(predicted)
 
-        return [vocabulary.itos[idx] for idx in caption]
+        return [self.vocabulary.itos[idx] for idx in caption]
