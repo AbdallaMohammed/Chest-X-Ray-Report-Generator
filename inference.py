@@ -30,13 +30,15 @@ def generate_report():
 
         image = image.to(config.DEVICE)
 
-        report = model.generate_caption(image.unsqueeze(0), max_length=request.form['max_length'])
+        report = model.generate_caption(image.unsqueeze(0), max_length=25)
 
-        return jsonify({'report': report})
+        return jsonify({'report': ' '.join(report)})
 
 
 
 if __name__ == '__main__':
     model = utils.get_model_instance(utils.load_dataset().vocab)
+
+    utils.load_checkpoint(model)
 
     app.run()

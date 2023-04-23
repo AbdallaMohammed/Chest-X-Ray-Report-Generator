@@ -47,7 +47,7 @@ def choose_image():
     label = Label(ff4, text='', fg='blue', bg='gray', font='Helvetica 16 bold')
     label.pack()
 
-    Button(ff3,text='Generate Report', bg='violet', command=generate_report, height=2, width=20, font='Helvetica 16 bold').pack(side=LEFT)
+    Button(ff3, text='Generate Report', bg='violet', command=generate_report, height=2, width=20, font='Helvetica 16 bold').pack(side=LEFT)
     Button(ff3, text='Quit', bg='red', command=quit_gui, height=2, width=20, font='Helvetica 16 bold').pack()
 
     screen.bind('<Configure>', lambda event: label.configure(wraplength=label.winfo_width()))
