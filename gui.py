@@ -8,9 +8,11 @@ from tkinter import filedialog
 
 
 label = None
+image = None
+model = None
 
 def choose_image():
-    global label
+    global label, image
 
     path = filedialog.askopenfilename(initialdir='images', title='Select Photo')
 
@@ -29,42 +31,45 @@ def choose_image():
     ff3 = Frame(screen, bg='grey', borderwidth=6, relief=GROOVE)
     ff3.pack(side=TOP, fill=X)
 
-    Label(ff1, text='Welcome to Report Generator', fg='red', bg='Green', font='Helvetica 16 bold').pack()
+    Label(ff1, text='Select X-Ray', fg='white', bg='grey', font='Helvetica 16 bold').pack()
 
-    image = np.array(Image.open(path).convert('L'))
+    original_img = Image.open(path).convert('L')
+
+    image = np.array(original_img)
     image = np.expand_dims(image, axis=-1)
     image = image.repeat(3, axis=-1)
 
     image = config.basic_transforms(image=image)['image']
 
-    photo = ImageTk.PhotoImage(image)
+    photo = ImageTk.PhotoImage(original_img)
 
     Label(ff2, image=photo).pack()
-    label = Label(ff4, text='Caption', fg='blue', bg='gray', font='Helvetica 16 bold')
+    label = Label(ff4, text='', fg='blue', bg='gray', font='Helvetica 16 bold')
     label.pack()
 
     Button(ff3,text='Generate Report', bg='violet', command=generate_report, height=2, width=20, font='Helvetica 16 bold').pack(side=LEFT)
     Button(ff3, text='Quit', bg='red', command=quit_gui, height=2, width=20, font='Helvetica 16 bold').pack()
 
+    screen.bind('<Configure>', lambda event: label.configure(wraplength=label.winfo_width()))
     screen.mainloop()
 
 def generate_report():
-    global label
+    global label, image, model
+
+    model.eval()
 
     image = image.to(config.DEVICE)
 
-    model = utils.get_model_instance(utils.load_dataset().vocab)
-    report = model.generate_caption(image.unsqueeze(0), max_length=75)
+    report = model.generate_caption(image.unsqueeze(0), max_length=25)
 
-    label.config(text=report, fg='violet', bg='green', font='Helvetica 16 bold')
+    label.config(text=report, fg='violet', bg='green', font='Helvetica 16 bold', width=40)
     label.update_idletasks()
 
 def quit_gui():
     root.destroy()
 
 root = Tk()
-root.title('Image Report Generator')
-root.geometry('500x500')
+root.title('Chest X-Ray Report Generator')
 
 f1 = Frame(root, bg='grey', borderwidth=6, relief=GROOVE)
 f1.pack(side=TOP, fill=X)
@@ -72,11 +77,16 @@ f1.pack(side=TOP, fill=X)
 f2 = Frame(root, bg='grey', borderwidth=6, relief=GROOVE)
 f2.pack(side=TOP, fill=X)
 
-Label(f1, text='Welcome to Image Report Generator', fg='red', bg='Green', font='Helvetica 16 bold').pack()
+Label(f1, text='Welcome to Chest X-Ray Report Generator', fg='white', bg='grey', font='Helvetica 16 bold').pack()
 
 btn1 = Button(root, text='Choose Chest X-Ray', command=choose_image, height=2, width=20, bg='blue', font="Helvetica 16 bold", pady=10)
 btn1.pack()
 
 Button(root, text='Quit', command=quit_gui, height=2, width=20, bg='violet', font='Helvetica 16 bold', pady=10).pack()
 
-root.mainloop()
+if __name__ == '__main__':
+    model = utils.get_model_instance(utils.load_dataset().vocab)
+    
+    utils.load_checkpoint(model)
+
+    root.mainloop()

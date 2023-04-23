@@ -13,11 +13,12 @@ from torch.utils.data import Subset
 from sklearn.model_selection import train_test_split as sklearn_train_test_split
 
 
-def load_dataset():
+def load_dataset(raw_caption=False):
     return XRayDataset(
         root=config.DATASET_PATH,
         transform=config.basic_transforms,
         freq_threshold=config.VOCAB_THRESHOLD,
+        raw_caption=raw_caption
     )
 
 
