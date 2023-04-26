@@ -46,7 +46,7 @@ def check_accuracy(dataset, model):
 def main():
     all_dataset = utils.load_dataset(raw_caption=True)
 
-    model = utils.get_model_instance(all_dataset.vocab)
+    model = utils.get_model_instance(all_dataset)
 
     utils.load_checkpoint(model)
 

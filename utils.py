@@ -10,6 +10,7 @@ from nltk.tokenize import word_tokenize
 from dataset import XRayDataset
 from model import EncoderDecoderNet
 from torch.utils.data import Subset
+from transformers import AutoTokenizer, AutoModel
 from sklearn.model_selection import train_test_split as sklearn_train_test_split
 
 
@@ -17,12 +18,25 @@ def load_dataset(raw_caption=False):
     return XRayDataset(
         root=config.DATASET_PATH,
         transform=config.basic_transforms,
-        freq_threshold=config.VOCAB_THRESHOLD,
         raw_caption=raw_caption
     )
 
 
-def get_model_instance(vocabulary):
+def load_bert_model():
+    model = AutoModel.from_pretrained(config.TRANSFORMER_MODEL, output_hidden_states=True)
+    model = model.to(config.DEVICE)
+
+    model.eval()
+
+    return model
+
+
+def get_model_instance(dataset=None):
+    if dataset is not None:
+        vocabulary = load_dataset().vocab
+    else:
+        vocabulary = dataset.vocab
+
     model = EncoderDecoderNet(
         features_size=config.FEATURES_SIZE,
         embed_size=config.EMBED_SIZE,
@@ -33,6 +47,13 @@ def get_model_instance(vocabulary):
     model = model.to(config.DEVICE)
 
     return model
+
+
+def load_bert_tokenizer():
+    tokenizer = AutoTokenizer.from_pretrained(config.TRANSFORMER_MODEL)
+
+    return tokenizer
+
 
 def train_test_split(dataset, test_size=0.25, random_state=44):
     train_idx, test_idx = sklearn_train_test_split(

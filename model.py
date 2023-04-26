@@ -1,6 +1,6 @@
-import re
 import torch
 import config
+import utils
 import torch.nn as nn
 import torch.nn.functional as F
 import torchvision.models as models
@@ -92,13 +92,37 @@ class Attention(nn.Module):
         return context, weights
 
 
+class BERTEmbedding(nn.Module):
+    def __init__(self, n_last_layers):
+        super(BERTEmbedding, self).__init__()
+
+        self.bert_model = utils.load_bert_model()
+        self.n_last_layers = n_last_layers
+        
+        for param in self.bert_model.parameters():
+            param.requires_grad_(False)
+
+    def forward(self, captions, masks):
+        outputs = self.bert_model(captions, masks)
+        
+        hidden_states = outputs[2]
+
+        tokens_embeddings = torch.stack(hidden_states, dim=0)
+        tokens_embeddings = tokens_embeddings.permute(1, 2, 0, 3)
+        
+        embeddings = torch.sum(tokens_embeddings[:, :, -self.n_last_layers:, :], dim=2)
+
+        return embeddings
+
+
 class DecoderRNN(nn.Module):
     def __init__(self, features_size, embed_size, hidden_size, vocab_size):
         super(DecoderRNN, self).__init__()
 
         self.vocab_size = vocab_size
 
-        self.embedding = nn.Embedding(vocab_size, embed_size)
+        self.embedding = BERTEmbedding(11)
+
         self.lstm = nn.LSTMCell(embed_size + features_size, hidden_size)
 
         self.fc = nn.Linear(hidden_size, vocab_size)
@@ -108,8 +132,8 @@ class DecoderRNN(nn.Module):
         self.init_h = nn.Linear(features_size, hidden_size)
         self.init_c = nn.Linear(features_size, hidden_size)
 
-    def forward(self, features, captions):
-        embeddings = self.embedding(captions)
+    def forward(self, features, captions, masks):
+        embeddings = self.embedding(captions, masks)
 
         h, c = self.init_hidden(features)
 
@@ -160,39 +184,31 @@ class EncoderDecoderNet(nn.Module):
             vocab_size=len(self.vocabulary)
         )
 
-    def forward(self, images, captions):
+    def forward(self, images, captions, masks):
         features = self.encoder(images)
-        outputs, _ = self.decoder(features, captions)
+        outputs, _ = self.decoder(features, captions, masks)
 
         return outputs
 
-    def generate_caption(self, image, max_length=25):
-        caption = []
+    def generate_caption(self, image, max_length=40):
+        caption_indexes = []
 
-        with torch.no_grad():
-            features = self.encoder(image)
-            h, c = self.decoder.init_hidden(features)
+        features = self.encoder(image)
+        caption_indexes = [self.vocabulary.tokens_to_ids['[CLS]'], self.vocabulary.tokens_to_ids['heart']]
 
-            word = torch.tensor(self.vocabulary.stoi['<SOS>']).view(1, -1).to(config.DEVICE)
-            embeddings = self.decoder.embedding(word).squeeze(0)
+        for _ in range(max_length):
+            caption_tensor = torch.LongTensor(caption_indexes).unsqueeze(0).to(config.DEVICE)
+            seg_ids = torch.ones_like(caption_tensor)
 
-            for _ in range(max_length):
-                context, _ = self.decoder.attention(features, h)
+            with torch.no_grad():
+                output, _ = self.decoder(features, caption_tensor, seg_ids)
 
-                inputs = torch.cat((embeddings, context), dim=1)
+            pred_token = output.argmax(2)[:, -1].item()
+            pred_token_idx = self.vocabulary.ids_adj_to_ids[pred_token]
+            caption_indexes.append(pred_token_idx)
 
-                h, c  = self.decoder.lstm(inputs, (h, c))
+            if pred_token_idx == self.vocabulary.tokens_to_ids['[SEP]']:
+                break
 
-                output = self.decoder.fc(F.dropout(h, p=0.5))
-                output = output.view(1, -1)
-
-                predicted = output.argmax(1)
-
-                if self.vocabulary.itos[predicted.item()] == '<EOS>':
-                    break
-
-                caption.append(predicted.item())
-
-                embeddings = self.decoder.embedding(predicted)
-
-        return [self.vocabulary.itos[idx] for idx in caption]
+        caption_tokens = [self.vocabulary.ids_to_tokens[id_] for id_ in caption_indexes]
+        return self.vocabulary.map_to_string(caption_tokens)

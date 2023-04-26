@@ -37,7 +37,7 @@ def generate_report():
 
 
 if __name__ == '__main__':
-    model = utils.get_model_instance(utils.load_dataset().vocab)
+    model = utils.get_model_instance()
 
     utils.load_checkpoint(model)
 

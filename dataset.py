@@ -1,5 +1,4 @@
 import os
-import spacy
 import torch
 import config
 import utils
@@ -7,69 +6,15 @@ import numpy as np
 import xml.etree.ElementTree as ET
 
 from PIL import Image
-from torch.nn.utils.rnn import pad_sequence
+from vocabulary import Vocab
 from torch.utils.data import Dataset, DataLoader
 
 
-spacy_eng = spacy.load('en_core_web_sm')
-
-
-class Vocabulary:
-    def __init__(self, freq_threshold):
-        self.itos = {
-            0: '<PAD>',
-            1: '<SOS>',
-            2: '<EOS>',
-            3: '<UNK>',
-        }
-        self.stoi = {
-            '<PAD>': 0,
-            '<SOS>': 1,
-            '<EOS>': 2,
-            '<UNK>': 3,
-        }
-        self.freq_threshold = freq_threshold
-
-    @staticmethod
-    def tokenizer(text):
-        return [tok.text.lower() for tok in spacy_eng.tokenizer(text)]
-
-    def build_vocabulary(self, sentence_list):
-        frequencies = {}
-        idx = 4
-
-        for sent in sentence_list:
-            for word in self.tokenizer(sent):
-                if word not in frequencies:
-                    frequencies[word] = 1
-                else:
-                    frequencies[word] += 1
-
-                if frequencies[word] == self.freq_threshold:
-                    self.stoi[word] = idx
-                    self.itos[idx] = word
-
-                    idx += 1
-
-    def numericalize(self, text):
-        tokenized_text = self.tokenizer(text)
-
-        return [
-            self.stoi[token] if token in self.stoi else self.stoi['<UNK>']
-            for token in tokenized_text
-        ]
-
-    def __len__(self):
-        return len(self.itos)
-
-
 class XRayDataset(Dataset):
-    def __init__(self, root, transform=None, freq_threshold=3, raw_caption=False):
+    def __init__(self, root, transform=None, raw_caption=False):
         self.root = root
         self.transform = transform
         self.raw_caption = raw_caption
-
-        self.vocab = Vocabulary(freq_threshold=freq_threshold)
 
         self.captions = []
         self.imgs = []
@@ -96,15 +41,14 @@ class XRayDataset(Dataset):
                 if frontal_img == '':
                     continue
                 
-                self.captions.append(findings)
+                self.captions.append(utils.normalize_text(findings))
                 self.imgs.append(frontal_img)
-                
 
-        self.vocab.build_vocabulary(self.captions)
+        self.vocab = Vocab(self.captions)
 
     def __getitem__(self, item):
         img = self.imgs[item]
-        caption = utils.normalize_text(self.captions[item])
+        caption = self.captions[item]
 
         img = np.array(Image.open(img).convert('L'))
         img = np.expand_dims(img, axis=-1)
@@ -115,12 +59,8 @@ class XRayDataset(Dataset):
 
         if self.raw_caption:
             return img, caption
-        
-        numericalized_caption = [self.vocab.stoi['<SOS>']]
-        numericalized_caption += self.vocab.numericalize(caption)
-        numericalized_caption.append(self.vocab.stoi['<EOS>'])
 
-        return img, torch.as_tensor(numericalized_caption, dtype=torch.long)
+        return img, caption
 
     def __len__(self):
         return len(self.captions)
@@ -130,25 +70,31 @@ class XRayDataset(Dataset):
 
 
 class CollateDataset:
-    def __init__(self, pad_idx):
-        self.pad_idx = pad_idx
+    def __init__(self):
+        self.tokenizer = utils.load_bert_tokenizer()
 
     def __call__(self, batch):
         images, captions = zip(*batch)
 
         images = torch.stack(images, 0)
-        
-        targets = [item for item in captions]
-        targets = pad_sequence(targets, batch_first=True, padding_value=self.pad_idx)
 
-        return images, targets
+        targets = self.tokenizer(
+            captions,
+            add_special_tokens=True,
+            padding=True,
+            return_tensors='pt'
+        )
+
+        targets = targets.input_ids
+        masks = torch.ones_like(targets)
+
+        return images, targets, masks
 
 
 if __name__ == '__main__':
     all_dataset = XRayDataset(
         root=config.DATASET_PATH,
         transform=config.basic_transforms,
-        freq_threshold=config.VOCAB_THRESHOLD,
     )
 
     train_loader = DataLoader(
@@ -157,9 +103,13 @@ if __name__ == '__main__':
         pin_memory=config.PIN_MEMORY,
         drop_last=True,
         shuffle=True,
-        collate_fn=CollateDataset(pad_idx=all_dataset.vocab.stoi['<PAD>']),
+        collate_fn=CollateDataset(),
     )
 
-    for img, caption in train_loader:
-        print(img.shape, caption.shape)
+    print(len(all_dataset.vocab))
+
+    for img, captions, masks in train_loader:
+        captions = captions.view(-1).cpu().detach().numpy()
+        print(len(all_dataset.vocab.tokenizer.convert_ids_to_tokens(captions)))
+        # print(all_dataset.vocab.map_to_trainset_ids(captions_batch))
         break

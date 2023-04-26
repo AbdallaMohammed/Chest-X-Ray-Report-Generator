@@ -85,7 +85,7 @@ btn1.pack()
 Button(root, text='Quit', command=quit_gui, height=2, width=20, bg='violet', font='Helvetica 16 bold', pady=10).pack()
 
 if __name__ == '__main__':
-    model = utils.get_model_instance(utils.load_dataset().vocab)
+    model = utils.get_model_instance()
     
     utils.load_checkpoint(model)
 
